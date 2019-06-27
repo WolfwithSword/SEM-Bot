@@ -4,10 +4,10 @@ A Simple Event Manager bot for Discord!
 
 Made for Discord Hack Week 2019.
 
-#Team
+# Team
 - WolfwithSword#0001
 
-#Features
+# Features
 
 This bot has the following features:
 
@@ -19,7 +19,7 @@ It is a simple bot, but it gets the job done and engages the community.
 
 It is timezone-aware, and a guild can set a specific timezone to use.
 
-#Config
+# Config
 
 Locate config/config.py and configure as needed.
 
@@ -30,7 +30,7 @@ Locate config/config.py and configure as needed.
 - ANNOUNCE_CHANNEL : Default announcement channel to create on guild join
 - TIMEZONES : Please don't change :) 
 
-#Permissions
+# Permissions
 
 The bot needs the following permissions string:
 *&permissions=1342565456&scope=bot*
@@ -48,7 +48,7 @@ This includes the following permissions. Some may not be needed, but are added a
 - Add Reactions
 - Use External Emojis
 
-#Packages
+# Packages
 
 The following external packages were used:
 
@@ -58,7 +58,7 @@ The following external packages were used:
 - arrow
 - tabulate
 
-#Commands
+# Commands
 
 - register: Register a user to the bot
 - stats: View user stats. Optional: Can mention a user
