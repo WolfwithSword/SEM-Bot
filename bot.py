@@ -518,6 +518,7 @@ async def info(ctx, code: str):
 
         await watchReactions(announcement, event, guild, ctx)
     except Exception as e :
+        print(e)
         await ctx.send("Could not send in announcement channel. Try having an organizer reset the announcement channel?")
 
 @event.command(aliases=['delete', 'cancel'], brief="Cancel an event",
@@ -575,28 +576,35 @@ async def watchReactions(msg, event, guild, ctx):
 
         _user = session.query(User).filter(User.id == user.id, User.guild_id == guild.id).one_or_none()
         if _user is None:
-            await user.send("You have not registered in server `{}` yet! Please {}register and try reacting again!".format(guild.name, bot.command_prefix))
-            return
+            await user.send("You have not registered in server `{}` yet! Please {}register and try reacting again!".format(ctx.message.guild.name, bot.command_prefix))
+        else:
+            emoji = str(reaction.emoji)
 
-        emoji = str(reaction.emoji)
+            if emoji == '✅' and len(user_ids) < event.num_participants and user.id not in user_ids:
+                response = Response(event_id = event.id, user_id = user.id, guild_id = guild.id, status="Yes")
+                session.add(response)
 
-        if emoji == '✅' and user.id not in user_ids:
-            response = Response(event_id = event.id, user_id = user.id, guild_id = guild.id, status="Yes")
-            session.add(response)
+            elif emoji == '✅' and len(user_ids) == event.num_participants and user.id not in user_ids:
+                await user.send("This event is full, please wait for someone to leave or join another!")
 
-        elif emoji == '❌' and user.id in user_ids:
-            response = [r for r in event.responses if r.status == "Yes" and r.user_id == user.id][0]
-            session.delete(response)
-        if emoji == '⏲':
-            reminded_users = [u.id for u in event.reminder.users]
-            if user.id not in reminded_users:
-                event.reminder.users.append(_user)
+            elif emoji == '❌' and user.id in user_ids:
+                response = [r for r in event.responses if r.status == "Yes" and r.user_id == user.id][0]
+                session.delete(response)
+            if emoji == '⏲':
+                if event.reminder is None:
+                    reminder = Reminder(event_id = event.id, event_time = event.event_time, guild_id = event.guild_id)
+                    session.add(reminder)
+                    session.commit()
+                    session.refresh(event)
+                reminded_users = [u.id for u in event.reminder.users]
+                if user.id not in reminded_users:
+                    event.reminder.users.append(_user)
 
-        session.commit()
+            session.commit()
 
-        embed = event.as_embed
-        embed.add_field(name="Creator: ", value=bot.get_user(event.creator_id))
-        await msg.edit(embed = embed)
+            embed = event.as_embed
+            embed.add_field(name="Creator: ", value=bot.get_user(event.creator_id))
+            await msg.edit(embed = embed)
 
         await watchReactions(reaction.message, event, guild, ctx)
     except asyncio.TimeoutError:
@@ -634,6 +642,7 @@ async def setTimezone(ctx):
         await ctx.send('```\n{}\n```'.format(table))
 
     message = "Please select a timezone from the list above. Respond with the number. EX To pick UTC, respond with {}\nCurrent timezone is: {}".format(len(config.TIMEZONES), guild.timezone)
+    message += "\nOr type in a valid GMT offset as this list is not DST aware. Format: GMT+##:## or GMT-##:##"
     message += "\n**Note:** Timezone changes are not retroactive to events or reminders. They are always in UTC."
 
     await ctx.send(message)
@@ -643,6 +652,16 @@ async def setTimezone(ctx):
                                               and message.channel.id == ctx.message.channel.id,
              timeout=180)
         try:
+            if str(msg.content).upper().startswith("GMT"):
+                try:
+                    arrow.utcnow().to(str(msg.content).upper())
+                    guild.timezone = str(msg.content).upper()
+                    session.commit()
+                    await ctx.send("Timezone successfully changed to {}".format(guild.timezone))
+                    return
+                except:
+                    await ctx.send("Non valid timezone sent. Please try again")
+                    return
             num = int(msg.content)
             if num < 1 or num > len(config.TIMEZONES):
                 await ctx.send("Non valid timezone sent. Please try again")
@@ -699,8 +718,8 @@ async def scan_reminders():
             for reminder in reminders:
                 users = [bot.get_user(user.id) for user in reminder.users]
                 msg = "Reminder for Event: `{}` with code {} starts in around 15 minutes!\n".format(reminder.event.title, reminder.event.code)
-                msg += " ".join([user.mention for user in users])
-                msg += "\nView information about the event with {}event {}\n".format(bot.command_prefix, reminder.event.code)
+                msg += " ".join(list(set([user.mention for user in users])))
+                msg += "\nView information about the event with `{}event info {}`\n".format(bot.command_prefix, reminder.event.code)
 
                 guild = session.query(Guild).filter(Guild.id == reminder.guild_id).one_or_none()
 
@@ -729,7 +748,7 @@ async def scan_events():
                 users = [bot.get_user(response.user_id) for response in event.responses if response.status == "Yes"]
 
                 msg = "Event: `{}` ({}) is starting!!!\n".format(event.title, event.code)
-                msg += " ".join([user.mention for user in users])
+                msg += " ".join(list(set([user.mention for user in users])))
 
                 guild = session.query(Guild).filter(Guild.id == event.guild_id).one_or_none()
 
@@ -788,8 +807,3 @@ if __name__ == '__main__':
     finally:
         print('Closing Session')
         session.close()
-
-
-# todo:
-# print current cerver time with >time (in guild timezone and in GMT 0 and in UTC, embed
-#

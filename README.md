@@ -92,7 +92,7 @@ The following external packages were used:
 > When making an event, it will create an announcement message, from which you can react to it to join, leave, or get a ping reminder 15 minutes prior to event start.
 	
 - guild: Some manager and owner only commands
-	- setTimezone: Given a list of timezones, select one as the server timezone
+	- setTimezone: Given a list of timezones, select one as the server timezone. Can also give a GMT offset instead.
 	- setAnnouncementChannel: Give a text channel to be SEM's new announcement channel for the server.
 	- seetManagerRole: Give a role to be the new manager role for the server.
 
