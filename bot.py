@@ -90,6 +90,9 @@ async def on_ready():
                     if channel.name == config.ANNOUNCE_CHANNEL:
                         g.announce_channel_id = channel.id
             session.commit()
+    bot.loop.create_task(scan_reminders())
+    bot.loop.create_task(scan_events())
+
 
 
 @bot.command(brief="Register as a User", aliases=['signup', 'join'],
@@ -137,7 +140,7 @@ async def stats(ctx):
 
         guild = session.query(Guild).filter(Guild.id == ctx.message.guild.id).one_or_none()
 
-        headers = ["Rank", "User", "Events Done", "Gold/Bronze/Silver/Participation", "Score"]
+        headers = ["Rank", "User", "Events Done", "Gold/Silver/Bronze/Participation", "Score"]
         all_ranks = session.query(Score.user_id).filter(Score.guild_id == ctx.message.guild.id).order_by(calcScore(guild, Score).desc()).all()
         all_ranks = [x[0] for x in all_ranks]
         rank = (all_ranks).index(user.id) +1
@@ -170,7 +173,7 @@ async def leaderboard(ctx):
         scores = session.query(Score).filter(Score.guild_id == guildID)\
             .order_by(calcScore(guild, Score).desc()).limit(15).all()
 
-        headers = ["Rank", "User", "Events Done", "Gold/Bronze/Silver/Participation", "Score"]
+        headers = ["Rank", "User", "Events Done", "Gold/Silver/Bronze/Participation", "Score"]
         rows = [("{}.".format(scores.index(s) + 1), (bot.get_user(s.user_id)).name,
                   s.event_count, "{}/{}/{}/{}".format(s.gold, s.silver, s.bronze, s.participation),
                  calcScore(guild, s)) for s in scores]
@@ -194,6 +197,66 @@ async def add(ctx):
 async def remove(ctx):
     if ctx.invoked_subcommand is None:
         await ctx.send("Please specify a trophy rank, followed by user mention(s)")
+@trophy.group()
+async def value(ctx):
+    author = ctx.author
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+
+    if not (author.id == _guild.owner.id or guild.manager_role_id in [r.id for r in author.roles]):
+        await ctx.send("You do not have permission to use this command")
+        return
+    if ctx.invoked_subcommand is None:
+        await ctx.send("Please specify a trophy type (or participation) to set the points of, followed by a positive value. This action is retroactive.")
+
+@value.command(brief="Set value for Gold trophies", aliases=['Gold'], description="Set value for Gold trophies")
+@commands.guild_only()
+async def gold(ctx, val:int):
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+    if val < 0:
+        await ctx.send("Cannot set negative value. Please try again.")
+        return
+    guild.gold_value = val
+    session.commit()
+    await ctx.send("Success!")
+
+@value.command(brief="Set value for Silver trophies", aliases=['Silver'], description="Set value for Silver trophies")
+@commands.guild_only()
+async def silver(ctx, val:int):
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+    if val < 0:
+        await ctx.send("Cannot set negative value. Please try again.")
+        return
+    guild.silver_value = val
+    session.commit()
+    await ctx.send("Success!")
+
+@value.command(brief="Set value for Bronze trophies", aliases=['Bronze'], description="Set value for Bronze trophies")
+@commands.guild_only()
+async def bronze(ctx, val:int):
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+    if val < 0:
+        await ctx.send("Cannot set negative value. Please try again.")
+        return
+    guild.bronze_value = val
+    session.commit()
+    await ctx.send("Success!")
+
+@value.command(brief="Set value for participation points", aliases=['Participation'], description="Set value for Participation points")
+@commands.guild_only()
+async def participation(ctx, val:int):
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+    if val < 0:
+        await ctx.send("Cannot set negative value. Please try again.")
+        return
+    guild.participation_value = val
+    session.commit()
+    await ctx.send("Success!")
+
 
 @add.command(brief="Add a gold trophy", aliases=['Gold'],
              description="Add a gold trophy to all mentioned users")
@@ -251,7 +314,7 @@ async def modifyTrophy(type, add, ctx):
         if len(ctx.message.mentions) < 1:
             await ctx.send("You must mention one or more users to add a trophy to. Format: {}add{} @User".format(bot.command_prefix, type))
             return
-        users_mentioned = set([u.id for u in ctx.message.mentions])
+        users_mentioned = list(set([u.id for u in ctx.message.mentions]))
         users = session.query(User).filter(User.guild_id == guildID, User.id.in_(users_mentioned)).all()
         for u in users_mentioned:
             if u not in [user.id for user in users]:
@@ -474,6 +537,30 @@ async def remove(ctx, code: str):
     session.commit()
     await ctx.send("Success!")
 
+@event.command(brief="View participants",
+               description="View the participants to a given event. Please provide the event code.")
+@commands.guild_only()
+async def participants(ctx, code: str):
+    code = code.upper()
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+
+    event = await checkEventExists(code, guild.id, ctx)
+    if event is None:
+        return
+
+    # tabulate users
+    headers = ['No.', 'Name']
+    users = [bot.get_user(u.user_id) for u in event.responses if u.status == "Yes"]
+    rows = [(users.index(user)+1, user.name) for user in users]
+    table = tabulate(rows, headers)
+    msg = "Current participants for Event {code}: {title} ({num}/{max})\n```\n{table}\n```\n"
+    msg = msg.format(code=event.code, title=event.title,
+                     num=len(users),
+                     max=event.num_participants, table=table)
+    await ctx.send(msg)
+
+
 async def watchReactions(msg, event, guild, ctx):
     try:
         session.refresh(event)
@@ -573,15 +660,124 @@ async def setTimezone(ctx):
 @guild.command(brief="Change announcement channel", description="Change announcement channel")
 @commands.guild_only()
 async def setAnnouncementChannel(ctx, channel: discord.TextChannel):
-    return
-    #TODO
+    author = ctx.author
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+
+    if not (author.id == _guild.owner.id or guild.manager_role_id in [r.id for r in author.roles]):
+        await ctx.send("You do not have permission to use this command")
+        return
+
+    guild.announce_channel_id = channel.id
+    session.commit()
+    await ctx.send("Success!")
 
 @guild.command(brief="Change Management Role (owner only)",
                description="Change the event manager role. Only the owner can do this")
 @commands.guild_only()
 async def setManagerRole(ctx, role:discord.Role):
-    return
-    #TODO
+    author = ctx.author
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+
+    if not (author.id == _guild.owner.id):
+        await ctx.send("You do not have permission to use this command")
+        return
+
+    guild.manager_role_id = role.id
+    session.commit()
+    await ctx.send("Success!")
+
+async def scan_reminders():
+    await bot.wait_until_ready()
+
+    while not bot.is_closed():
+        utc = arrow.utcnow()
+        utc15 = (arrow.utcnow()).replace(minutes=+15)
+        reminders = session.query(Reminder).filter(Reminder.event_time > utc, Reminder.event_time <= utc15).all()
+        if len(reminders) > 0:
+            for reminder in reminders:
+                users = [bot.get_user(user.id) for user in reminder.users]
+                msg = "Reminder for Event: `{}` with code {} starts in around 15 minutes!\n".format(reminder.event.title, reminder.event.code)
+                msg += " ".join([user.mention for user in users])
+                msg += "\nView information about the event with {}event {}\n".format(bot.command_prefix, reminder.event.code)
+
+                guild = session.query(Guild).filter(Guild.id == reminder.guild_id).one_or_none()
+
+                try:
+                    channel = bot.get_channel(guild.announce_channel_id)
+                    await channel.send(msg)
+                except:
+                    await ctx.send("Could not send in announcement channel. Try having an organizer reset the announcement channel?")
+
+            q = Reminder.__table__.delete().where(Reminder.event_time <= utc15)
+            session.execute(q)
+            session.commit()
+
+        await asyncio.sleep(60)
+
+async def scan_events():
+    await bot.wait_until_ready()
+
+    while not bot.is_closed():
+        utc = arrow.utcnow()
+        utcP1 = (arrow.utcnow()).replace(minutes=+1)
+        events = session.query(Event).filter(Event.event_time > utc, Event.event_time <= utcP1, Event.active == True).all()
+
+        if len(events) > 0:
+            for event in events:
+                users = [bot.get_user(response.user_id) for response in event.responses if response.status == "Yes"]
+
+                msg = "Event: `{}` ({}) is starting!!!\n".format(event.title, event.code)
+                msg += " ".join([user.mention for user in users])
+
+                guild = session.query(Guild).filter(Guild.id == event.guild_id).one_or_none()
+
+                embed = event.as_embed
+                embed.add_field(name="Creator: ", value=bot.get_user(event.creator_id))
+
+                try:
+                    announce_channel = bot.get_channel(guild.announce_channel_id)
+                    announcement = await announce_channel.send("Event is starting!",embed=embed)
+                except:
+                    await ctx.send("Could not send in announcement channel. Try having an organizer reset the announcement channel?")
+
+                channel = bot.get_channel(event.channel_id)
+                if channel is None:
+                    _guild = bot.get_guild(guild.id)
+                    channel = await _guild.create_text_channel(name="Event - {}".format(event.code),
+                                                    topic="SEM Event {}".format(event.code),
+                                                    reason="SEM Bot Event Channel. Specified did not exist!")
+                announcement = await channel.send("Event is starting!", embed=embed)
+                await channel.send(msg)
+
+                event.active = False
+                user_ids = [u.id for u in users]
+                scores = session.query(Score).filter(Score.guild_id == guild.id, Score.user_id.in_(user_ids)).all()
+                for score in scores:
+                    score.participation+=1
+                    score.event_count+=1
+
+                session.commit()
+
+        await asyncio.sleep(60)
+
+@bot.command(brief="View current times", description="View current times")
+@commands.guild_only()
+async def time(ctx):
+    _guild = ctx.message.guild
+    guild = session.query(Guild).filter(Guild.id == _guild.id).one_or_none()
+
+    current_time_utc = arrow.utcnow()
+    server_time = current_time_utc.to(guild.timezone)
+    gmt_time = current_time_utc.to("GMT+00:00")
+
+    embed = discord.Embed(title="Time", description="Current Server Times", colour=5111790)
+    embed.add_field(name="UTC", value=current_time_utc, inline = False)
+    embed.add_field(name="Server", value=server_time, inline = True)
+    embed.add_field(name="Server TZ", value=guild.timezone, inline = True)
+    embed.add_field(name="GMT", value=gmt_time, inline = False)
+    await ctx.send(embed=embed)
 
 if __name__ == '__main__':
     try:
@@ -594,5 +790,6 @@ if __name__ == '__main__':
         session.close()
 
 
-#TODO
-#print current server time with >time command (in guild timezone and in GMT 0 and in UTC, embed
+# todo:
+# print current cerver time with >time (in guild timezone and in GMT 0 and in UTC, embed
+#
