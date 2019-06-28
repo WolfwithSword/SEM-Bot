@@ -94,6 +94,23 @@ The following external packages were used:
 - guild: Some manager and owner only commands
 	- setTimezone: Given a list of timezones, select one as the server timezone. Can also give a GMT offset instead.
 	- setAnnouncementChannel: Give a text channel to be SEM's new announcement channel for the server.
-	- seetManagerRole: Give a role to be the new manager role for the server.
+	- setManagerRole: Give a role to be the new manager role for the server which can create events.
 
 - time: View current time information about the server
+
+Basic commands (Not sub commands)
+![base commands](https://i.imgur.com/jQ6bnkF.png)
+
+Timezone selection
+![timezone select](https://i.imgur.com/4omGCi3.png)
+
+Trophy info and statistics
+![values](https://i.imgur.com/fjqJbew.png)
+
+Time Info
+![time](https://i.imgur.com/dTzB0H8.png)
+
+Sample event
+![event](https://i.imgur.com/P4lKa6H.png)
+
+And many more! Not all commands are shown as that would be a lot of screenshots. These are just some unique ones.
