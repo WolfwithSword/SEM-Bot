@@ -71,6 +71,7 @@ The following external packages were used:
 	- add
 	- remove
 	- value
+	- info : View the current server values for all trophies and rewards
 	
 > For each add, remove and set, you can specify a trophy type: **Gold**, **Silver**, **Bronze**.
 	

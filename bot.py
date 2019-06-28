@@ -189,6 +189,15 @@ async def trophy(ctx):
     if ctx.invoked_subcommand is None:
         await ctx.send("Please specify an action and trophy rank, followed by user mention(s)")
 
+@trophy.command(brief="View values for trophies!", description="View values for trophies!")
+async def info(ctx):
+    guild_id = ctx.message.guild.id
+    guild = session.query(Guild).filter(Guild.id == guild_id).one_or_none()
+    msg = "**Trophies and Rewards**\n"
+    msg += "Gold: {}\nSilver: {}\nBronze: {}\n"
+    msg += "Participation: {}"
+    await ctx.send(msg.format(guild.gold_value, guild.silver_value, guild.bronze_value, guild.participation_value))
+
 @trophy.group()
 async def add(ctx):
     if ctx.invoked_subcommand is None:
