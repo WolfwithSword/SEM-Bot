@@ -542,8 +542,14 @@ async def remove(ctx, code: str):
     if event is None:
         return
 
+    embed = event.as_embed
+    embed.add_field(name="Creator: ", value=bot.get_user(event.creator_id))
+    try:
+        announce_channel = bot.get_channel(guild.announce_channel_id)
+        announcement = await announce_channel.send("Event Cancelled!",embed=embed)
+    except:
+        await ctx.send("Could not announce event cancellation.")
     event.active = False
-    session.delete(event.reminder)
     session.commit()
     await ctx.send("Success!")
 
@@ -725,6 +731,8 @@ async def scan_reminders():
         reminders = session.query(Reminder).filter(Reminder.event_time > utc, Reminder.event_time <= utc15).all()
         if len(reminders) > 0:
             for reminder in reminders:
+                if not reminder.event.active:
+                    continue
                 users = [bot.get_user(user.id) for user in reminder.users]
                 msg = "Reminder for Event: `{}` with code {} starts in around 15 minutes!\n".format(reminder.event.title, reminder.event.code)
                 msg += " ".join(list(set([user.mention for user in users])))
