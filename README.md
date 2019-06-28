@@ -115,3 +115,11 @@ Sample event
 ![event](https://i.imgur.com/P4lKa6H.png)
 
 And many more! Not all commands are shown as that would be a lot of screenshots. These are just some unique ones.
+
+
+# To Run
+Pretty standard stuff.
+
+Install the required packages: `pip install -r requirements.txt`
+
+To Run: You can do this in a virtual env if you want to set that up, but to be quick and easy, configure config/config.py with your bot token and then just run bot.py. 
